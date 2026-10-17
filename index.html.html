@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>休憩モード</title>
+<style>
+:root{--bg:#f3f1ec;--fg:#1d2420;--mute:#6b746e;--card:#fff;--line:#d9d6cc;--ac:#1f6f54;--acfg:#fff;--warn:#b3261e;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#121815;--fg:#e8ede9;--mute:#93a097;--card:#1b2420;--line:#2c3832;--ac:#4cc79a;--acfg:#08150f;--warn:#ff8a80}}
+:root[data-theme="dark"]{--bg:#121815;--fg:#e8ede9;--mute:#93a097;--card:#1b2420;--line:#2c3832;--ac:#4cc79a;--acfg:#08150f;--warn:#ff8a80}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;background:var(--bg);color:var(--fg);font-family:"Hiragino Sans","Noto Sans JP",system-ui,sans-serif;line-height:1.6}
+main{max-width:480px;margin:0 auto;padding:20px 18px 40px}
+h1{font-size:20px;margin:0 0 4px}
+p{margin:0}.mute{color:var(--mute);font-size:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin:14px 0}
+textarea,select{width:100%;font:inherit;font-size:16px;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:12px}
+button{font:inherit;font-weight:700;border:0;border-radius:12px;padding:16px;width:100%;background:var(--ac);color:var(--acfg);cursor:pointer}
+button.sub{background:transparent;color:var(--mute);border:1px solid var(--line);font-weight:500;padding:12px;margin-top:10px}
+button:disabled{opacity:.4}
+button:focus-visible,textarea:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid var(--ac);outline-offset:2px}
+.chk{display:flex;gap:12px;align-items:flex-start;margin:14px 0}
+.chk input{width:24px;height:24px;flex:none;margin-top:2px}
+.opts{display:flex;gap:8px;margin-top:8px}
+.opts button{background:var(--bg);color:var(--fg);border:1px solid var(--line);padding:12px 8px;font-weight:500}
+.opts button.on{background:var(--ac);color:var(--acfg);border-color:var(--ac);font-weight:700}
+.row{display:flex;gap:10px}.row>div{flex:1}
+.num{font-size:26px;font-weight:700}
+.big{font-size:72px;font-weight:700;text-align:center;margin:24px 0 8px;font-variant-numeric:tabular-nums}
+.act{text-align:center;font-size:20px;margin:0 0 20px}
+.over{position:fixed;inset:0;background:var(--bg);padding:max(24px,env(safe-area-inset-top,0px)) 20px 24px;display:flex;flex-direction:column;justify-content:center;gap:14px;z-index:5}
+.over.red{background:var(--warn);color:#fff}
+.over.red button{background:#fff;color:var(--warn)}
+</style>
+</head>
+<body>
+<main id="app"></main>
+<script>
+var KEY="kyuukei-v1",S,tick=null,wl=null,$=document.getElementById("app");
+var ideas=["立ち上がって水を飲む","窓の外を遠くまで見る","肩と首のストレッチ","部屋を1周歩く","目を閉じて深呼吸","軽くスクワット10回"];
+var mode="home",len=5,act=ideas[0],end=0,start=0,hiddenAt=0,flash=null,quit=false,qStart=0,qt=null,failed=false;
+function load(){try{S=JSON.parse(localStorage.getItem(KEY))}catch(e){S=null}if(!S)S={days:{}}}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
+function key(d){return d.getFullYear()+"-"+(d.getMonth()+1)+"-"+d.getDate()}
+function day(){var k=key(new Date());if(!S.days[k])S.days[k]={ok:0,ng:0};return S.days[k]}
+function streak(){var n=0;for(var d=new Date();;d.setDate(d.getDate()-1)){var r=S.days[key(d)];if(r&&r.ok>0&&r.ng===0)n++;else if(n>0||key(d)!==key(new Date()))break}return n}
+function fmt(ms){var s=Math.max(0,Math.ceil(ms/1000));return String(Math.floor(s/60)).padStart(2,"0")+":"+String(s%60).padStart(2,"0")}
+
+function home(){
+ var d=day();
+ $.innerHTML='<h1>休憩モード</h1><p class="mute">Studyplusの計測を止めたら、まずここを開く。</p>'
+ +'<div class="card"><p>休憩の長さ</p><div class="opts" id="ls"></div>'
+ +'<p style="margin-top:16px">休憩でやること</p><select id="a" aria-label="休憩でやること"></select></div>'
+ +'<label class="chk"><input type="checkbox" id="c"><span>スマホを画面を下にして、手の届きにくい場所に置く準備ができた</span></label>'
+ +'<button id="go" disabled>休憩を始める</button>'
+ +'<div class="card"><div class="row"><div><p class="mute">スマホなし成功</p><p class="num">'+d.ok+'回</p></div><div><p class="mute">触ってしまった</p><p class="num" style="color:'+(d.ng?"var(--warn)":"inherit")+'">'+d.ng+'回</p></div><div><p class="mute">連続成功日</p><p class="num">'+streak()+'日</p></div></div></div>';
+ var ls=document.getElementById("ls");
+ [5,10,15].forEach(function(m){var b=document.createElement("button");b.textContent=m+"分";b.className=m===len?"on":"";b.onclick=function(){len=m;home()};ls.appendChild(b)});
+ var sel=document.getElementById("a");ideas.forEach(function(t){var o=document.createElement("option");o.textContent=t;sel.appendChild(o)});sel.value=act;sel.onchange=function(){act=sel.value};
+ var c=document.getElementById("c"),g=document.getElementById("go");
+ c.onchange=function(){g.disabled=!c.checked};
+ g.onclick=begin}
+function begin(){mode="break";failed=false;start=Date.now();end=start+len*60000;quit=false;
+ if(navigator.wakeLock){navigator.wakeLock.request("screen").then(function(w){wl=w}).catch(function(){})}
+ clearInterval(tick);tick=setInterval(step,500);run()}
+function run(){
+ $.innerHTML='<p class="mute" style="text-align:center;margin-top:24px">スマホなし休憩</p>'
+ +'<div class="big" id="clk">'+fmt(end-Date.now())+'</div>'
+ +'<p class="act">'+act+'</p>'
+ +'<p class="mute" style="text-align:center">画面は触らず、置いたままにします。</p>'
+ +'<button class="sub" id="q" style="margin-top:48px">休憩をやめる</button>'
+ +(flash?'<div class="over red" role="alert"><div class="num">スマホを触りました</div><p>'+flash+'</p><button id="ok">置いて続ける</button></div>':'')
+ +(quit?'<div class="over"><div class="num">本当にやめますか</div><p class="mute">10秒待って、理由を書いてください。やめると「触った」に数えます。</p><textarea id="why" rows="3" placeholder="理由"></textarea><button id="qok" disabled>やめる(<span id="qs">10</span>)</button><button class="sub" id="qno">続ける</button></div>':'');
+ var ok=document.getElementById("ok");if(ok)ok.onclick=function(){flash=null;run()};
+ document.getElementById("q").onclick=function(){quit=true;qStart=Date.now();run();clearInterval(qt);qt=setInterval(qcheck,300)};
+ if(quit){document.getElementById("qno").onclick=function(){quit=false;clearInterval(qt);run()};
+  document.getElementById("qok").onclick=function(){failed=true;finish(true)}}}
+function qcheck(){var b=document.getElementById("qok");if(!b)return;
+ var left=Math.max(0,10-Math.floor((Date.now()-qStart)/1000));document.getElementById("qs").textContent=left;
+ b.disabled=!(left===0&&document.getElementById("why").value.trim().length>0)}
+function step(){var c=document.getElementById("clk");if(c)c.textContent=fmt(end-Date.now());if(Date.now()>=end)finish(false)}
+function finish(early){clearInterval(tick);clearInterval(qt);quit=false;
+ if(wl){try{wl.release()}catch(e){}wl=null}
+ var d=day();if(failed)d.ng++;else d.ok++;save();mode="home";
+ if(early){home();return}
+ $.innerHTML='<h1 style="margin-top:30px">'+(failed?"休憩は終了です":"スマホなしで休憩できました")+'</h1><p style="margin:10px 0 24px">Studyplusを開いて、集中モードで計測を再開してください。</p><button id="h">ホームに戻る</button>';
+ document.getElementById("h").onclick=home}
+document.addEventListener("visibilitychange",function(){
+ if(mode!=="break")return;
+ if(document.hidden){hiddenAt=Date.now()}
+ else if(hiddenAt){var away=Date.now()-hiddenAt;hiddenAt=0;if(away<1500)return;
+  failed=true;flash=Math.round(away/1000)+"秒、このアプリを離れていました。今回の休憩は「触った」に数えます。";run()}});
+load();home();
+</script>
+</body>
+</html>
